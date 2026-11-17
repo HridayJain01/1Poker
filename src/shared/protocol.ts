@@ -116,8 +116,12 @@ export interface ChatMessage {
   /** Sound (voice note / sound sticker). */
   audioId?: string;
   emoji?: string;
+  /** Built-in synthesized sound key (played locally by each client). */
+  sound?: string;
   durationMs?: number;
 }
+
+export const FUN_SOUND_KEYS = ['horn', 'drum', 'sad', 'tada', 'cash', 'boing', 'buzz', 'clock', 'boom'];
 
 export type ChatInput = Omit<ChatMessage, 'id' | 'at' | 'from' | 'name'>;
 

@@ -12,6 +12,7 @@ import {
   ClientToServer,
   cleanAvatar,
   cleanName,
+  FUN_SOUND_KEYS,
   HandSummary,
   LedgerRow,
   MEDIA_ID_RE,
@@ -582,6 +583,7 @@ export class Room {
         m.mediaId = media(i.mediaId);
         m.audioId = media(i.audioId);
         m.text = str(i.text, 40) || undefined;
+        m.sound = typeof i.sound === 'string' && FUN_SOUND_KEYS.includes(i.sound) ? i.sound : undefined;
         if (!m.emoji && !m.mediaId) return 'Sticker missing';
         if (i.mediaId && !m.mediaId) return 'Sticker upload expired, try again';
         break;
@@ -599,6 +601,7 @@ export class Room {
         m.text = str(i.text, 80);
         if (!m.text) return 'Empty phrase';
         m.emoji = str(i.emoji, 16) || undefined;
+        m.sound = typeof i.sound === 'string' && FUN_SOUND_KEYS.includes(i.sound) ? i.sound : undefined;
         break;
       }
       case 'face': {
