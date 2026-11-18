@@ -39,6 +39,8 @@ export interface SeatProps {
   /** offset from the seat to the deck (table center), for the deal animation */
   deal: { x: number; y: number };
   hero: boolean;
+  /** Seat sits at the screen edge: keep labels on-screen. */
+  edge?: 'left' | 'right' | null;
   acting: boolean;
   deadline: number | null;
   total: number;
@@ -72,7 +74,7 @@ export const Seat = memo(function Seat(p: SeatProps) {
 
   return (
     <div
-      className={cls('seat', p.hero && 'hero', p.acting && 'acting', folded && 'folded', out && 'out', p.winner && 'winner')}
+      className={cls('seat', p.hero && 'hero', p.edge && `edge-${p.edge}`, p.acting && 'acting', folded && 'folded', out && 'out', p.winner && 'winner')}
       style={{ left: p.x, top: p.y }}
       onClick={p.onTap}
       data-seat={player.seat ?? undefined}

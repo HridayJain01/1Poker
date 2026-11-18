@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawn, ChildProcess } from 'node:child_process';
 import { io as connect, Socket } from 'socket.io-client';
 import type { ChatMessage, ClientToServer, RoomView, ServerToClient } from '../src/shared/protocol';
+import type { FlopAction, TPAction } from '../src/shared/engine';
 
 const PORT = 3999 + Math.floor(Math.random() * 500);
 const URL = `http://localhost:${PORT}`;
@@ -36,6 +37,8 @@ interface Bot {
   chat: ChatMessage[];
   token?: string;
   id?: string;
+  packer?: boolean;
+  allIn?: boolean;
 }
 
 function makeBot(): Bot {
@@ -56,7 +59,9 @@ function autoplay(bot: Bot) {
   const aw = h.awaiting;
   if (h.family === 'flop') {
     if (aw.type === 'action' && aw.playerId === v.you && h.legal) {
-      bot.s.emit('game:act', { handId: h.handId, action: h.legal.canCheck ? { type: 'check' } : { type: 'call' } });
+      const l = h.legal;
+      const action: FlopAction = bot.allIn && l.canRaise && l.maxRaiseTo === l.allInTo ? { type: 'allin' } : l.canCheck ? { type: 'check' } : { type: 'call' };
+      bot.s.emit('game:act', { handId: h.handId, action });
     } else if (aw.type === 'discard' && h.discardCount > 0) {
       const mine = h.players.find((p) => p.id === v.you)!.hole!;
       bot.s.emit('game:discard', { handId: h.handId, cards: mine.slice(0, h.discardCount) });
@@ -64,7 +69,9 @@ function autoplay(bot: Bot) {
   } else {
     if (aw.type === 'action' && aw.playerId === v.you && h.legal) {
       const l = h.legal;
-      bot.s.emit('game:act', { handId: h.handId, action: l.canShow ? { type: 'show' } : { type: 'chaal' } });
+      // bots marked "packer" fold in Teen Patti so hands end without draining stacks
+      const action: TPAction = l.canShow ? { type: 'show' } : bot.packer ? { type: 'pack' } : { type: 'chaal' };
+      bot.s.emit('game:act', { handId: h.handId, action });
     } else if (aw.type === 'sideshow' && aw.playerId === v.you) {
       bot.s.emit('game:sideshow', { handId: h.handId, accept: true });
     }
@@ -88,6 +95,7 @@ describe('server end-to-end', () => {
   const host = makeBot();
   const b = makeBot();
   const c = makeBot();
+  c.packer = true;
   let code = '';
 
   it('creates a room and lets friends join and sit', async () => {
@@ -149,6 +157,37 @@ describe('server end-to-end', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/out of chips/);
   });
+
+  it('counts a new bank when a busted player rebuys', async () => {
+    const x = makeBot();
+    const y = makeBot();
+    x.allIn = true;
+    y.allIn = true;
+    const r = await call<{ code: string }>(x.s, 'room:create', {
+      profile: profile('Bust'),
+      settings: { mode: 'fixed', sb: 5, bb: 10, startingStack: 40, actionTime: 10, maxSeats: 2 },
+    });
+    expect(r.ok).toBe(true);
+    expect((await call(y.s, 'room:join', { code: r.data!.code, profile: profile('Lucky') })).ok).toBe(true);
+    expect((await call(y.s, 'seat:take', { seat: 1 })).ok).toBe(true);
+    expect((await call(x.s, 'host:pause')).ok).toBe(false); // not started yet
+    expect((await call(x.s, 'host:start')).ok).toBe(true);
+    // everyone shoves every hand until someone is out of chips
+    await waitFor(() => !!x.view && x.view.handOver && x.view.players.some((p) => p.stack === 0), 60000, 'someone busts');
+    expect((await call(x.s, 'host:pause')).ok).toBe(true);
+    const busted = [x, y].find((bot) => bot.view!.players.find((p) => p.id === bot.view!.you)!.stack === 0)!;
+    const winner = busted === x ? y : x;
+    expect((await call(winner.s, 'player:rebuy')).ok).toBe(false);
+    expect((await call(busted.s, 'player:rebuy')).ok).toBe(true);
+    await waitFor(() => busted.view!.players.find((p) => p.id === busted.view!.you)!.banks === 2, 5000, 'bank #2');
+    const row = busted.view!.ledger.find((l) => l.id === busted.view!.you)!;
+    expect(row.banks).toBe(2);
+    expect(row.boughtIn).toBe(80);
+    expect(row.stack).toBe(40);
+    expect(busted.view!.ledger.reduce((s, l) => s + l.stack, 0)).toBe(120);
+    x.s.disconnect();
+    y.s.disconnect();
+  }, 90000);
 
   it('reconnects to the same seat with the saved token', async () => {
     b.s.disconnect();

@@ -7,7 +7,7 @@ import { useStore } from '../lib/store';
 import { cls } from '../lib/format';
 import { QUICK_EMOJIS } from '../lib/chat';
 
-const MAKER_EMOJIS = ['😂', '🔥', '😭', '🤣', '😱', '🤯', '💀', '🤡', '👑', '💸', '🚀', '🙏', '😈', '🐐', '🥶', '😤', '🫡', '🎉', '🃏', '💩', ...QUICK_EMOJIS.slice(0, 4)];
+const MAKER_EMOJIS = [...new Set(['😂', '🔥', '😭', '🤣', '😱', '🤯', '💀', '🤡', '👑', '💸', '🚀', '🙏', '😈', '🐐', '🥶', '😤', '🫡', '🎉', '🃏', '💩', '😎', '🤑', '👀', '🍀', ...QUICK_EMOJIS])].slice(0, 24);
 
 /** Build a sticker: an emoji or image, plus a recorded or uploaded sound (e.g. "FAAAH"). */
 export function SoundStickerMaker({ onDone, onCancel }: { onDone: (s: StoredSticker) => void; onCancel: () => void }) {
@@ -99,8 +99,8 @@ export function SoundStickerMaker({ onDone, onCancel }: { onDone: (s: StoredStic
       </div>
       <div className="label">1 · Pick an emoji or image</div>
       <div className="emoji-grid">
-        {MAKER_EMOJIS.map((e, i) => (
-          <button key={e + i} className={cls(!image && emoji === e && 'on')} onClick={() => { setImage(null); setImageUrl(null); setEmoji(e); }}>
+        {MAKER_EMOJIS.map((e) => (
+          <button key={e} className={cls(!image && emoji === e && 'on')} onClick={() => { setImage(null); setImageUrl(null); setEmoji(e); }}>
             {e}
           </button>
         ))}

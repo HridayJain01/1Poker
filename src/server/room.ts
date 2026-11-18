@@ -300,8 +300,11 @@ export class Room {
 
   rebuy(p: SPlayer): string | null {
     if (this.isDealt(p)) {
-      // Chips are locked in the running hand: apply when it ends.
-      if (!this.settings.rebuy) return 'Rebuys are turned off by the host';
+      // Chips are locked in the running hand. Only queue a bank for a player who has
+      // (almost) nothing left behind; it is applied — if still needed — when the hand ends.
+      const behind = this.stackOf(p);
+      const err = this.rebuyBlocker({ ...p, stack: behind });
+      if (err) return err;
       p.rebuyPending = true;
       this.broadcast();
       return null;
@@ -875,7 +878,8 @@ export class Room {
       }
       if (p.rebuyPending) {
         p.rebuyPending = false;
-        this.applyRebuy(p);
+        if (this.rebuyBlocker(p)) this.toast(p, 'No new bank needed — you still have chips!');
+        else this.applyRebuy(p);
       }
       if (p.leaveAfterHand) {
         p.leaveAfterHand = false;

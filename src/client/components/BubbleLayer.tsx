@@ -54,7 +54,8 @@ export function BubbleLayer({ view, positions, size }: { view: RoomView; positio
         {items.map(({ key, seat, msg }) => {
           const pt = positions[seat];
           if (!pt) return null;
-          const x = (pt.x / 100) * size.w;
+          // keep bubbles fully on screen at edge seats
+          const x = Math.min(size.w - 66, Math.max(66, (pt.x / 100) * size.w));
           const y = (pt.y / 100) * size.h;
           const face = msg.kind === 'face';
           const below = !face && pt.y < 24;

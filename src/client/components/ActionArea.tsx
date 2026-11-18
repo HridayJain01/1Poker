@@ -12,6 +12,7 @@ import { useNow } from '../lib/hooks';
 import { request } from '../lib/socket';
 import { useStore } from '../lib/store';
 import { sfx, vibrate } from '../lib/sound';
+import { winSummary } from './Table';
 
 type Pre = 'checkfold' | 'check' | 'callany' | null;
 
@@ -85,7 +86,10 @@ export function ActionArea({ view, selected, clearSelected }: { view: RoomView; 
   if (!dealtLive) {
     const busted = me.stack < minChips && !(d.running && heroHp);
     const status = (() => {
-      if (view.handOver && view.nextHandAt) return `Next hand in ${seconds(view.nextHandAt - now)}s`;
+      if (view.handOver && view.nextHandAt) {
+        const w = winSummary(view);
+        return `${w ? `${w.title} · ` : ''}Next hand in ${seconds(view.nextHandAt - now)}s`;
+      }
       if (d.running && heroHp?.folded) return 'You folded — waiting for the hand to finish';
       if (d.running) return 'You will be dealt in next hand';
       return '';
@@ -197,12 +201,7 @@ function strengthFor(hand: FlopHandView, hole: CardT[] | null): string {
   if (!hole || hole.length === 0) return '';
   const info = VARIANTS[hand.game.variant];
   const board = hand.boards[0] ?? [];
-  if (board.length >= 3) {
-    const keepingAll = info.rule === 'holdem' && hole.length > 2;
-    const v = bestHigh(hole, board, info.rule, info.mode);
-    if (!v) return '';
-    return keepingAll ? v.name : v.name;
-  }
+  if (board.length >= 3) return bestHigh(hole, board, info.rule, info.mode)?.name ?? '';
   if (info.rule === 'omaha' || hole.length > 2) return '';
   return describePartial(hole);
 }
@@ -312,7 +311,11 @@ function FlopActions({ view, hand, now, selected, clearSelected }: { view: RoomV
     if (raising && legal.canRaise && hand.game.structure !== 'FL') {
       return (
         <div className="action-area">
-          <RaisePanel hand={hand} legal={legal} busy={busy} onCancel={() => setRaising(false)} onConfirm={(to) => act({ type: 'raise', to }).then(() => setRaising(false))} />
+          {/* the panel floats over the table so the table doesn't jump */}
+          <div className="raise-overlay">
+            <RaisePanel hand={hand} legal={legal} busy={busy} onCancel={() => setRaising(false)} onConfirm={(to) => act({ type: 'raise', to }).then(() => setRaising(false))} />
+          </div>
+          <div className="act-placeholder" />
         </div>
       );
     }

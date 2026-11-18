@@ -30,6 +30,8 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
   const d = derive(view);
   const { hand, me } = d;
   const landscape = size.w > size.h * 1.08;
+  // Scale seats, chips and labels up on big screens (phones stay at 1).
+  const k = Math.max(1, Math.min(1.7, Math.min(size.w / 640, size.h / 560)));
   const heroSeat = me?.seat ?? null;
   const positions = useMemo(() => seatPositions(view.settings.maxSeats, heroSeat, landscape), [view.settings.maxSeats, heroSeat, landscape]);
   const px = (pt: { x: number; y: number }) => ({ x: (pt.x / 100) * size.w, y: (pt.y / 100) * size.h });
@@ -98,17 +100,17 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
   const boards = flop?.boards ?? [];
   const nBoards = boards.length;
   const feltW = size.w * (landscape ? 0.86 : 0.82);
-  const boardW = Math.floor(Math.min(nBoards > 2 ? 34 : nBoards > 1 ? 40 : 50, (feltW - 46) / 5.6, size.h * (nBoards > 2 ? 0.06 : nBoards > 1 ? 0.075 : 0.095)));
+  const boardW = Math.floor(Math.min((nBoards > 2 ? 34 : nBoards > 1 ? 40 : 50) * k, (feltW - 46) / 5.6, size.h * (nBoards > 2 ? 0.06 : nBoards > 1 ? 0.075 : 0.095)));
 
   // hero cards
   const heroHole = d.heroHp?.hole ?? null;
   const heroCount = d.heroHp?.holeCount ?? 0;
   const heroLive = !!d.heroHp && !d.heroHp.folded;
   const heroPos = heroSeat !== null ? seatPx(heroSeat) : null;
-  const baseHeroW = Math.round(Math.min(landscape ? 58 : 66, Math.max(42, size.h * (landscape ? 0.12 : 0.105))));
+  const baseHeroW = Math.round(Math.min((landscape ? 58 : 66) * k, Math.max(42, size.h * (landscape ? 0.12 : 0.105))));
   const heroW = heroCount <= 3 ? baseHeroW : heroCount === 4 ? Math.round(baseHeroW * 0.88) : Math.round(baseHeroW * 0.8);
   const overlap = heroCount <= 3 ? -2 : heroCount === 4 ? heroW * 0.16 : heroW * 0.3;
-  const heroCardsTop = heroPos ? heroPos.y - 26 - heroW * 1.4 : 0;
+  const heroCardsTop = heroPos ? heroPos.y - 26 * k - heroW * 1.4 : 0;
   const heroHalf = (heroCount * heroW - Math.max(0, heroCount - 1) * overlap * 2) / 2;
   const discarding = flop && flop.discardCount > 0;
   const tpBlind = tp && d.heroHp && !(d.heroHp as { seen: boolean }).seen && !heroHole;
@@ -128,7 +130,7 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
   const showLobby = !view.started || (!hand && !view.chooser);
 
   return (
-    <div className={`table-area ${landscape ? 'landscape' : ''}`} ref={ref}>
+    <div className={`table-area ${landscape ? 'landscape' : ''}`} ref={ref} style={{ ['--k' as string]: k }}>
       <div className="felt-wrap">
         <div className="rim" />
         <div className="felt">
@@ -239,6 +241,7 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
                 y={pos.y}
                 deal={{ x: center.x - pos.x, y: center.y - pos.y }}
                 hero={pl.id === view.you}
+                edge={positions[seat].x < 22 ? 'left' : positions[seat].x > 78 ? 'right' : null}
                 acting={d.actingId === pl.id || (!!hand && d.running && hand.awaiting.type === 'sideshow' && hand.awaiting.playerId === pl.id)}
                 deadline={view.deadline}
                 total={timerTotal}
@@ -301,7 +304,7 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
               const ux = dx / len;
               const uy = dy / len;
               const isHero = seat === heroSeat;
-              const pos = isHero ? { x: s.x + heroHalf + 18, y: s.y - 34 } : { x: s.x + ux * 50 - uy * 28, y: s.y + uy * 50 + ux * 28 };
+              const pos = isHero ? { x: s.x + heroHalf + 18 * k, y: s.y - 34 * k } : { x: s.x + (ux * 50 - uy * 28) * k, y: s.y + (uy * 50 + ux * 28) * k };
               return (
                 <div className="dealer-btn" style={{ left: pos.x, top: pos.y }}>
                   D
@@ -362,7 +365,7 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
             </motion.div>
           ))}
 
-          <WinBanner view={view} />
+          <WinBanner view={view} bottom={heroPos && heroCount > 0 ? heroCardsTop - 6 : size.h * 0.7} />
           <BubbleLayer view={view} positions={positions} size={size} />
         </>
       )}
@@ -370,39 +373,53 @@ export function Table({ view, selected, onToggleCard }: { view: RoomView; select
   );
 }
 
-function WinBanner({ view }: { view: RoomView }) {
+/** Title + subtitle describing who won the finished hand (null while a hand runs). */
+export function winSummary(view: RoomView): { title: string; sub: string } | null {
   const hand = view.hand;
   const r = view.handOver ? hand?.result : null;
   const winners = r ? Object.entries(r.totals).filter(([, a]) => a > 0) : [];
+  if (!r || !winners.length) return null;
   const name = (id: string) => (id === view.you ? 'You' : view.players.find((p) => p.id === id)?.name ?? 'Player');
-  let title = '';
-  let sub = '';
-  if (r && winners.length) {
-    if (winners.length === 1) {
-      const [id, amt] = winners[0];
-      title = `${name(id)} ${id === view.you ? 'win' : 'wins'} ${chipsShort(amt)}`;
-      const h = r.hands.find((x) => x.id === id);
-      sub = r.byFold ? 'Everyone else folded' : h?.boards.map((b) => b.hi?.name).filter(Boolean)[0] ?? '';
-    } else {
-      title = winners.length > 2 ? 'Split pot' : `${name(winners[0][0])} & ${name(winners[1][0])}`;
-      sub = winners.map(([id, a]) => `${name(id)} +${chipsShort(a)}`).join(' · ');
-    }
+  if (winners.length === 1) {
+    const [id, amt] = winners[0];
+    const h = r.hands.find((x) => x.id === id);
+    return {
+      title: `${name(id)} ${id === view.you ? 'win' : 'wins'} ${chipsShort(amt)}`,
+      sub: r.byFold ? 'Everyone else folded' : h?.boards.map((b) => b.hi?.name).filter(Boolean)[0] ?? '',
+    };
   }
+  return {
+    title: winners.length > 2 ? 'Split pot' : `${name(winners[0][0])} & ${name(winners[1][0])}`,
+    sub: winners.map(([id, a]) => `${name(id)} +${chipsShort(a)}`).join(' · '),
+  };
+}
+
+/** Pops up when a hand ends, then fades so the board and hands stay readable. */
+function WinBanner({ view, bottom }: { view: RoomView; bottom: number }) {
+  const sum = winSummary(view);
+  const handId = view.hand?.handId ?? 0;
+  const [hidden, setHidden] = useState<number | null>(null);
+  useEffect(() => {
+    if (!sum) return;
+    const t = setTimeout(() => setHidden(handId), 3000);
+    return () => clearTimeout(t);
+  }, [!!sum, handId]);
+  const show = !!sum && hidden !== handId;
   return (
     <AnimatePresence>
-      {title && (
+      {show && (
         <motion.div
-          key={`${hand?.handId}-win`}
-          className="center-banner"
-          style={{ top: hand?.family === 'teenpatti' ? '62%' : '63%' }}
+          key={`${handId}-win`}
+          className="center-banner banner-bottom"
+          style={{ top: bottom }}
           initial={{ opacity: 0, scale: 0.7, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9 }}
+          exit={{ opacity: 0, scale: 0.92, y: -6 }}
           transition={{ type: 'spring', stiffness: 300, damping: 22, delay: 0.25 }}
         >
           <div className="win-banner">
-            <div className="wb-title">{title}</div>
-            {sub && <div className="wb-sub">{sub}</div>}
+            <div className="wb-title">{sum!.title}</div>
+            {sum!.sub && <div className="wb-sub">{sum!.sub}</div>}
           </div>
         </motion.div>
       )}

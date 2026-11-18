@@ -348,6 +348,9 @@ export function speak(text: string) {
 
 export function vibrate(pattern: number | number[]) {
   if (!useStore.getState().settings.haptics) return;
+  // browsers refuse vibration until the user has interacted with the page
+  const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  if (ua && !ua.hasBeenActive) return;
   try {
     navigator.vibrate?.(pattern);
   } catch {
